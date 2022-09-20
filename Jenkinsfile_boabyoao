@@ -1,0 +1,42 @@
+node{
+  def mavenHome = tool name: 'maven3.8.6'    
+  stage('1.Clone'){
+    git 'https://github.com/RucciRuch/paypal-web-app.git'        
+  }
+  stage('2.MavenBuild'){
+    sh "${mavenHome}/bin/mvn clean package"  
+  }
+  stage('3.CodeQuality'){
+    sh "${mavenHome}/bin/mvn sonar:sonar"  
+  }
+  stage('4.UploadArtifacts'){
+    sh "${mavenHome}/bin/mvn deploy"  
+  }
+  stage('5.Deploy2Tomcat'){
+    deploy adapters: [tomcat9(credentialsId: 'tomcat-credentials1', path: '', url: 'http://44.210.128.124:8080/')], contextPath: null, war: 'target/web-app.war'  
+  }
+  stage('6.Deploy2uat'){
+    sshagent(['Tomcatcredentials']) {
+    sh "scp -o StrictHostKeyChecking=no target/*.war ec2-user@44.210.128.124:/opt/tomcat9/webapps/uat.war"
+  }  
+  stage('7.Approval'){        
+  timeout (time:5, unit:'DAYS'){
+      input message:'Please approve deployment to Production'
+  }
+  stage('8.Deploy2Production'){
+    sshagent(['Tomcatcredentials']) {
+    sh "scp -o StrictHostKeyChecking=no target/*.war ec2-user@44.210.128.124:/opt/tomcat9/webapps/app.war"
+  }
+  stage('9.EmailAlerts'){
+    emailext body: '''Hi,
+
+Build status for boa app.
+
+Regards,
+Landmark Technologies''', subject: 'Project status', to: 'boa@gmail.com'  
+  }
+  
+    }
+  }
+  }
+}
